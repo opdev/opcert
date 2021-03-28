@@ -2,6 +2,10 @@ FROM python:buster
 
 #jupyter-notebook
 RUN pip install jupyterlab; \
+# offline-cataloger
+wget https://github.com/kevinrizza/offline-cataloger/releases/download/0.0.1/offline-cataloger; \
+chmod +x offline-cataloger; \
+mv offline-cataloger /usr/local/bin/offline-cataloger; \
 # operator-sdk
 wget https://github.com/operator-framework/operator-sdk/releases/download/v1.5.0/operator-sdk_linux_amd64; \
 chmod +x operator-sdk_linux_amd64; \
@@ -36,4 +40,6 @@ RUN useradd -ms /bin/bash jupyter
 USER jupyter
 WORKDIR /home/jupyter
 
-CMD ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
+COPY init.sh /home/jupyter/
+
+CMD ["/bin/bash", "./init.sh"]
