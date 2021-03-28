@@ -4,6 +4,8 @@ import yaml
 import subprocess
 import os
 import shutil
+import ipywidgets as widgets
+from IPython.display import display
 
 class Bundles:
     def __init__(self):
@@ -14,18 +16,22 @@ class Bundles:
          [shutil.rmtree(d) for d in os.listdir('.') if d.startswith('manifests-')]
 
     def Download(self):
-        print("\n\nDownloading manifests for selected certified operators... \n\n")
         cmd = ["offline-cataloger", "generate-manifests", "certified-operators"]
         process = subprocess.Popen(cmd)
         output = process.communicate()[0]
         process.wait()
-        print("Done.")
+        [[self.bundles.append(subd) for subd in os.listdir(d)] for d in os.listdir('.') if d.startswith('manifests-')]
+
+    def List(self):
+        self.Update()
+        w = widgets.Dropdown(
+                options=self.bundles,
+                description='',
+                disabled=False,
+            )
+        display(w)
 
     def Update(self):
         self.Clean()
         self.Download()
-        
-    def List(self):
-        print("\n\nListing existing certified bundles...\n")
-        print("---------------------------------")
-        [[print(subd) for subd in os.listdir(d)] for d in os.listdir('.') if d.startswith('manifests-')]
+
