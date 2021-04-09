@@ -133,14 +133,14 @@ func HasLabels(img string) scapiv1alpha3.TestStatus {
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
-	cmd := exec.Command("docker", "pull", img)
+	cmd := exec.Command("podman", "pull", img)
 
 	err := cmd.Run()
 	if err != nil {
 		log.Fatalf("cmd.Run() failed with %s\n", err)
 	}
 
-	cmd = exec.Command("docker", "inspect", img)
+	cmd = exec.Command("podman", "inspect", img)
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput
 
