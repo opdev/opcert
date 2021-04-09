@@ -1,6 +1,6 @@
 # opcert - The Operator Enablement Test Suite for Certified Operators
 
-opcert is a tool to run image and bundle certification tests. This project has a companion container image that has opcert as an entry point that will be used to integrate with operator-sdk's scorecard subcommand in order to provide partners a way to test locally their operators.
+opcert is a tool to run operator image and bundle certification tests. This project has a companion container image that has the opcert binary in order to run tests from the container. That will be used to integrate with operator-sdk's scorecard subcommand in order to provide partners a way to test locally their operators without having to use yet another tool.
 
 This very first alpha 0.0.1 version has only one test that already complies with the operator-sdk scorecard standard. It can be tested as below:
 
