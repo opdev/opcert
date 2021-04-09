@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "debug",
       "program": "${file}",
-      "args": ["has_labels", "centos:latest"]
+      "args": ["has_labels", "alpine:latest"]
     }
   ]
 }
