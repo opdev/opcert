@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/opdev/opcert/pkg/opcert"
 	"github.com/savaki/jq"
@@ -40,7 +39,7 @@ func main() {
 	// `operator-sdk` command.
 	switch entrypoint[0] {
 	case IsRHELTest:
-		result = IsRHEL(img)
+		result = IsRHEL(&opcert)
 	case HasLabelsTest:
 		result = HasLabels(img)
 	default:
@@ -87,93 +86,38 @@ const (
 // the FROM clause in your dockerfile. We recommend using one of the images that are part of the Red Hat
 // Universal Base Image (UBI) set, such as ubi7/ubi or ubi7/ubi-minimal.
 
-func IsRHEL(img string) scapiv1alpha3.TestStatus {
+func IsRHEL(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r := scapiv1alpha3.TestResult{}
 	r.Name = "IsRHEL"
 	r.State = scapiv1alpha3.PassState
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
-	// get partner image manifests
-
-	cmd := exec.Command("docker", "inspect", img)
-	cmdOutput := &bytes.Buffer{}
-	cmd.Stdout = cmdOutput
-
-	err := cmd.Run()
-	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
-	}
-
-	// get partner base image layer sha256 digests from manifest
-
-	op, _ := jq.Parse(".[0].RootFS.Layers")
-	layers, _ := op.Apply(cmdOutput.Bytes())
-
-	partnerBaseLayers := []string{}
-	err = json.Unmarshal(layers, &partnerBaseLayers)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Printf("Partner labels are %v\n", partnerBaseLayers)
-	// get base image tag
-
-	op, _ = jq.Parse(".[0].ContainerConfig.Labels.name")
-	name, _ := op.Apply(cmdOutput.Bytes())
-
-	op, _ = jq.Parse(".[0].ContainerConfig.Labels.version")
-	version, _ := op.Apply(cmdOutput.Bytes())
-
-	op, _ = jq.Parse(".[0].ContainerConfig.Labels.release")
-	release, _ := op.Apply(cmdOutput.Bytes())
-
-	fmt.Printf("The Base image Tag is: %v:%v-%v\n", strings.Trim(string(name), "\""), strings.Trim(string(version), "\""), strings.Trim(string(release), "\""))
-
 	//  pull base image from catalog
-
-	registry := "registry.access.redhat.com/"
-	rh_image := registry + strings.Trim(string(name), "\"") + ":" + strings.Trim(string(version), "\"") + "-" + strings.Trim(string(release), "\"")
-
-	cmd = exec.Command("docker", "pull", rh_image)
-
-	err = cmd.Run()
+	err := o.PullImage(o.BaseImage)
 	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
+		r.State = scapiv1alpha3.FailState
+		r.Errors = append(r.Errors, "couldn't pull image from registry.access.redhat.com")
+		r.Suggestions = append(r.Suggestions, "Verify if the base image is provided by Red Hat and available at registry.access.redhat.com")
 	}
 
 	// get Red Hat base image layer sha256 digests from manifest
-
-	cmd = exec.Command("docker", "inspect", rh_image)
-
-	cmdOutput = &bytes.Buffer{}
-	cmd.Stdout = cmdOutput
-
-	err = cmd.Run()
-	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
-	}
-
-	op, _ = jq.Parse(".[0].RootFS.Layers")
-	layers, _ = op.Apply(cmdOutput.Bytes())
-
-	rhBaseLayers := []string{}
-	err = json.Unmarshal(layers, &rhBaseLayers)
+	rhImgLayers, err := o.GetImageLayers(o.BaseImage)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	fmt.Printf("Red Hat labels are %v\n", rhBaseLayers)
-
-	// compare existing layers with Red Hat content using manifests
-
-	for i, layer := range rhBaseLayers {
-		if partnerBaseLayers[i] != layer {
-			fmt.Printf("NOT EQUAL partner base layer is %v and rh layer is %v\n", partnerBaseLayers[i], layer)
-		} else {
-			fmt.Printf("EQUAL partner base layer is %v and rh layer is %v\n", partnerBaseLayers[i], layer)
+	// compare partner base image layers with Red Hat's base image layers
+	for i, layer := range rhImgLayers {
+		if o.LayerDigests[i] != layer {
+			r.State = scapiv1alpha3.FailState
+			r.Errors = append(r.Errors, "Base image layer "+o.LayerDigests[i]+" doesn't match Red Hat's layer "+layer)
 		}
 	}
-
+	if r.State == scapiv1alpha3.FailState {
+		r.Suggestions = append(r.Suggestions, "Verify that base image is provided by Red Hat.")
+		r.Suggestions = append(r.Suggestions, "Make sure base layers weren't changed.")
+	}
 	return wrapResult(r)
 }
 

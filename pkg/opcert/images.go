@@ -12,16 +12,16 @@ import (
 )
 
 type OpCert struct {
-	version      string
-	builder      string
-	image        string
-	layerCount   int
-	layerDigests []string
-	baseImage    string
+	Version      string
+	Builder      string
+	Image        string
+	LayerCount   int
+	LayerDigests []string
+	BaseImage    string
 }
 
 func (o *OpCert) Init(builder string, img string) error {
-	o.builder = builder
+	o.Builder = builder
 
 	if err := o.PullImage(img); err != nil {
 		err := fmt.Errorf("opcert wasn't able to pull image from %v", img)
@@ -33,9 +33,9 @@ func (o *OpCert) Init(builder string, img string) error {
 		err = fmt.Errorf("opcert couldn't read a proper base image tag from %v manifest", img)
 		return err
 	}
-	o.baseImage = baseImage
+	o.BaseImage = baseImage
 
-	o.layerDigests, err = o.GetImageLayers(img)
+	o.LayerDigests, err = o.GetImageLayers(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read image layers from %v", img)
 		return err
@@ -46,11 +46,11 @@ func (o *OpCert) Init(builder string, img string) error {
 
 func (o *OpCert) PullImage(img string) error {
 
-	cmd := exec.Command(o.builder, "pull", img)
+	cmd := exec.Command("docker", "pull", img)
 
 	err := cmd.Run()
 	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
+		fmt.Printf("Couldn't pull image %s %s\n", img, err)
 		return err
 	}
 	return nil
