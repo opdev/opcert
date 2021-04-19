@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "debug",
       "program": "${file}",
-      "args": ["has_labels", "alpine:latest"]
+      "args": ["is_rhel", "localhost/ubi8:custom"]
     }
   ]
 }

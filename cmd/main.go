@@ -7,7 +7,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
+	"github.com/opdev/opcert/pkg/opcert"
 	"github.com/savaki/jq"
 
 	scapiv1alpha3 "github.com/operator-framework/api/pkg/apis/scorecard/v1alpha3"
@@ -25,8 +27,14 @@ func main() {
 	// 	log.Fatal(err.Error())
 	// }
 	img := os.Args[2]
+	builder := "docker"
+
 	fmt.Println(img)
 	var result scapiv1alpha3.TestStatus
+
+	opcert := opcert.OpCert{}
+
+	opcert.Init(builder, img)
 
 	// Names of the custom tests which would be passed in the
 	// `operator-sdk` command.
@@ -86,19 +94,85 @@ func IsRHEL(img string) scapiv1alpha3.TestStatus {
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
+	// get partner image manifests
+
 	cmd := exec.Command("docker", "inspect", img)
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput
-	err := cmd.Run()
 
+	err := cmd.Run()
 	if err != nil {
 		log.Fatalf("cmd.Run() failed with %s\n", err)
 	}
 
-	output := string(cmdOutput.Bytes())
-	fmt.Printf("output is %v", output)
-	// fmt.Print(string(cmd.Stdout))
-	// r.Log = string(cmd.Stdout)
+	// get partner base image layer sha256 digests from manifest
+
+	op, _ := jq.Parse(".[0].RootFS.Layers")
+	layers, _ := op.Apply(cmdOutput.Bytes())
+
+	partnerBaseLayers := []string{}
+	err = json.Unmarshal(layers, &partnerBaseLayers)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Printf("Partner labels are %v\n", partnerBaseLayers)
+	// get base image tag
+
+	op, _ = jq.Parse(".[0].ContainerConfig.Labels.name")
+	name, _ := op.Apply(cmdOutput.Bytes())
+
+	op, _ = jq.Parse(".[0].ContainerConfig.Labels.version")
+	version, _ := op.Apply(cmdOutput.Bytes())
+
+	op, _ = jq.Parse(".[0].ContainerConfig.Labels.release")
+	release, _ := op.Apply(cmdOutput.Bytes())
+
+	fmt.Printf("The Base image Tag is: %v:%v-%v\n", strings.Trim(string(name), "\""), strings.Trim(string(version), "\""), strings.Trim(string(release), "\""))
+
+	//  pull base image from catalog
+
+	registry := "registry.access.redhat.com/"
+	rh_image := registry + strings.Trim(string(name), "\"") + ":" + strings.Trim(string(version), "\"") + "-" + strings.Trim(string(release), "\"")
+
+	cmd = exec.Command("docker", "pull", rh_image)
+
+	err = cmd.Run()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+	}
+
+	// get Red Hat base image layer sha256 digests from manifest
+
+	cmd = exec.Command("docker", "inspect", rh_image)
+
+	cmdOutput = &bytes.Buffer{}
+	cmd.Stdout = cmdOutput
+
+	err = cmd.Run()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+	}
+
+	op, _ = jq.Parse(".[0].RootFS.Layers")
+	layers, _ = op.Apply(cmdOutput.Bytes())
+
+	rhBaseLayers := []string{}
+	err = json.Unmarshal(layers, &rhBaseLayers)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Printf("Red Hat labels are %v\n", rhBaseLayers)
+
+	// compare existing layers with Red Hat content using manifests
+
+	for i, layer := range rhBaseLayers {
+		if partnerBaseLayers[i] != layer {
+			fmt.Printf("NOT EQUAL partner base layer is %v and rh layer is %v\n", partnerBaseLayers[i], layer)
+		} else {
+			fmt.Printf("EQUAL partner base layer is %v and rh layer is %v\n", partnerBaseLayers[i], layer)
+		}
+	}
 
 	return wrapResult(r)
 }
@@ -109,7 +183,7 @@ func IsRHEL(img string) scapiv1alpha3.TestStatus {
 // Why? To ensure, for a UBI type project, RPM packages present in a container image are only from UBI and RHEL
 // user space. Red Hat allows redistribution of UBI content as per UBI EULA. Red Hat allows redistribution of
 // RHEL user space packages as per Red Hat Container Certification Appendix. Presence of any kernel package will
-// cause the test to fail.
+// cause the test to fail.f
 // How? Confirm all Red Hat RPMs included in the container image are from UBI and RHEL user space.
 
 // 3. Container image must include the following metadata: (buildah inspect)
