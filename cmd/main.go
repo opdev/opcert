@@ -243,10 +243,26 @@ func HasGoodTags(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 
 // ****** 9. Image must include Partner’s software terms and conditions
 // Test name: has_licenses
-// Why? So the end user is aware of the terms and conditions applicable to the software. Including opens source
+// Why? So the end user is aware of the terms and conditions applicable to the software. Including open source
 // licensing information, if open source components are included in the image.
 // How? Create a directory named /licenses and include all relevant licensing and/or terms and conditions as text
 // file(s) in that directory.
+
+func HasLicenses(o *opcert.OpCert) scapiv1alpha3.TestStatus {
+
+	r := scapiv1alpha3.TestResult{}
+	r.Name = "Has Licenses"
+	r.State = scapiv1alpha3.PassState
+	r.Errors = make([]string, 0)
+	r.Suggestions = make([]string, 0)
+
+	if o.HasLicenses == false {
+		r.State = scapiv1alpha3.FailState
+		r.Errors = append(r.Errors, "There is no /licenses folder and license information in the container image  %v", o.Image)
+		r.Suggestions = append(r.Suggestions, "Please add the licenses folder and license files to the image %v.", o.Image)
+	}
+	return wrapResult(r)
+}
 
 // *************************************  Security Tests ************************************************
 

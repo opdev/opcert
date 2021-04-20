@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os/exec"
 	"strings"
@@ -19,6 +20,7 @@ type OpCert struct {
 	LayerDigests []string
 	Tags         []string
 	BaseImage    string
+	HasLicenses  bool
 }
 
 func (o *OpCert) Init(builder string, img string) error {
@@ -48,6 +50,12 @@ func (o *OpCert) Init(builder string, img string) error {
 		return err
 	}
 
+	o.HasLicenses, err = o.CheckLicenses(img)
+	if err != nil {
+		err = fmt.Errorf("opcert couldn't read directory structure from %v", img)
+		return err
+	}
+
 	return nil
 }
 
@@ -65,7 +73,7 @@ func (o *OpCert) PullImage(img string) error {
 
 func (o *OpCert) GetBaseImage(img string) (string, error) {
 
-	cmd := exec.Command("docker", "inspect", img)
+	cmd := exec.Command(o.Builder, "inspect", img)
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput
 
@@ -91,7 +99,7 @@ func (o *OpCert) GetBaseImage(img string) (string, error) {
 
 func (o *OpCert) GetImageLayers(img string) ([]string, error) {
 
-	cmd := exec.Command("docker", "inspect", img)
+	cmd := exec.Command(o.Builder, "inspect", img)
 
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput
@@ -139,4 +147,43 @@ func (o *OpCert) GetTags(img string) ([]string, error) {
 	}
 
 	return tags, nil
+}
+func (o *OpCert) CheckLicenses(img string) (bool, error) {
+
+	cmd := exec.Command(o.Builder, "create", img)
+
+	cmdOutput := &bytes.Buffer{}
+	cmd.Stdout = cmdOutput
+
+	err := cmd.Run()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+		return false, err
+	}
+
+	op, _ := jq.Parse(".")
+	containerID, _ := op.Apply(cmdOutput.Bytes())
+
+	cmd = exec.Command(o.Builder, "cp", string(containerID), ":/", "/scorecard/certified/")
+
+	err = cmd.Run()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+		return false, err
+	}
+
+	files, err := ioutil.ReadDir("/scorecard/certified/")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	hasLicenses := false
+
+	for _, f := range files {
+		if f.IsDir() && f.Name() == "licenses" {
+			hasLicenses = true
+		}
+	}
+
+	return hasLicenses, nil
 }
