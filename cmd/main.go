@@ -197,13 +197,13 @@ func HasLabels(img string) scapiv1alpha3.TestStatus {
 // command:
 // yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical
 
-// 6. should not modify, replace or combine the Red Hat base layer(s) (buildah inspect ???)
+// ***** 6. should not modify, replace or combine the Red Hat base layer(s) (buildah inspect ???)
 // Test name: good_layer_count
 // Why? So the base layer provided by Red Hat can still be identified and inspected.
 // How? Typically not an issue. Do not use any tools that attempt to or actually modify, replace, combine (aka
 // squash) or otherwise obfuscate layers after the image has been built.
 
-// 7. The uncompressed container image should have less than 40 layers. (podman history -q <imagenameorid> | wc -l)
+// ****** 7. The uncompressed container image should have less than 40 layers. (podman history -q <imagenameorid> | wc -l)
 // Test name: has_under_40_layers
 // Why? To ensure that an uncompressed container image has less than 40 layers. Too many layers within a
 // container image can degrade container performance. Red Hat atomic errors out trying to mount an image with
@@ -213,13 +213,32 @@ func HasLabels(img string) scapiv1alpha3.TestStatus {
 // commands to display layers and their size within a container image:
 // podman history <container image name> or docker history <container image name> .
 
-// 8. Image should include a tag, other than latest
+func has_under_40_layers(o *opcert.OpCert) scapiv1alpha3.TestStatus {
+	r := scapiv1alpha3.TestResult{}
+	r.Name = "Has Under 40 Layers"
+	r.State = scapiv1alpha3.PassState
+	r.Errors = make([]string, 0)
+	r.Suggestions = make([]string, 0)
+
+	layers, err := o.GetImageLayers(o.Image)
+	if err != nil {
+		fmt.Printf("Couldn't get image layers %v", err)
+	}
+	if len(layers) >= 40 {
+		r.State = scapiv1alpha3.FailState
+		r.Errors = append(r.Errors, "Image has 40 or more layers.")
+		r.Suggestions = append(r.Suggestions, "Reduce the number of layers by optimizing the container file.")
+	}
+	return wrapResult(r)
+}
+
+// ****** 8. Image should include a tag, other than latest
 // Test name: good_tags
 // Why? So the image can be uniquely identified
 // How? Use the docker tag command to add a tag. A common tag is the image version. The latest tag will be
 // automatically added to the most recent image, so it should not be set explicitly.
 
-// 9. Image must include Partner’s software terms and conditions
+// ****** 9. Image must include Partner’s software terms and conditions
 // Test name: has_licenses
 // Why? So the end user is aware of the terms and conditions applicable to the software. Including opens source
 // licensing information, if open source components are included in the image.
