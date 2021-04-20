@@ -1,15 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 
 	"github.com/opdev/opcert/pkg/opcert"
-	"github.com/savaki/jq"
 	"golang.org/x/mod/semver"
 
 	scapiv1alpha3 "github.com/operator-framework/api/pkg/apis/scorecard/v1alpha3"
@@ -39,10 +36,22 @@ func main() {
 	// Names of the custom tests which would be passed in the
 	// `operator-sdk` command.
 	switch entrypoint[0] {
+
 	case IsImageRedHatProvidedTest:
 		result = IsImageRedHatProvided(&opcert)
+
 	case HasLabelsTest:
-		result = HasLabels(img)
+		result = HasLabels(&opcert)
+
+	case HasUnder40LayersTest:
+		result = HasLabels(&opcert)
+
+	case HasGoodTagsTest:
+		result = HasLabels(&opcert)
+
+	case HasLicensesTest:
+		result = HasLabels(&opcert)
+
 	default:
 		result = printValidTests()
 	}
@@ -55,6 +64,14 @@ func main() {
 	fmt.Printf("%s\n", string(prettyJSON))
 
 }
+
+const (
+	IsImageRedHatProvidedTest = "is_red_hat"
+	HasLabelsTest             = "has_labels"
+	HasUnder40LayersTest      = "has_under_40_Layers"
+	HasGoodTagsTest           = "has_good_tags"
+	HasLicensesTest           = "has_licenses"
+)
 
 // printValidTests will print out full list of test names to give a hint to the end user on what the valid tests are.
 func printValidTests() scapiv1alpha3.TestStatus {
@@ -71,13 +88,6 @@ func printValidTests() scapiv1alpha3.TestStatus {
 		Results: []scapiv1alpha3.TestResult{result},
 	}
 }
-
-const (
-	IsImageRedHatProvidedTest = "is_red_hat"
-	HasLabelsTest             = "has_labels"
-	HasUnder40LayersTest      = "has_under_40_Layers"
-	HasGoodTagsTest           = "has_good_tags"
-)
 
 // Mandatory tests with possible fail results:
 
@@ -99,7 +109,7 @@ const (
 
 func IsImageRedHatProvided(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r := scapiv1alpha3.TestResult{}
-	r.Name = "IsRHEL"
+	r.Name = "Is Image Red Hat Provided"
 	r.State = scapiv1alpha3.PassState
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
@@ -144,41 +154,30 @@ func IsImageRedHatProvided(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 // Why? Providing metadata in consistent format helps customers inspect and manage images
 // How? Define these as LABELs in your dockerfile.
 
-func HasLabels(img string) scapiv1alpha3.TestStatus {
+func HasLabels(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r := scapiv1alpha3.TestResult{}
 	r.Name = "Has Labels"
 	r.State = scapiv1alpha3.PassState
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
-	cmd := exec.Command("podman", "pull", img)
+	testLabels := []string{"name", "vendor", "version", "release", "summary", "description"}
 
-	err := cmd.Run()
-	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
-	}
+	var isTestLabelPresent bool
 
-	cmd = exec.Command("podman", "inspect", img)
-	cmdOutput := &bytes.Buffer{}
-	cmd.Stdout = cmdOutput
-
-	err = cmd.Run()
-	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
-	}
-
-	labels := []string{"name", "vendor", "version", "release", "summary", "description"}
-	for _, label := range labels {
-		op, _ := jq.Parse(".[0].Config.Labels." + label)
-		value, _ := op.Apply(cmdOutput.Bytes())
-		if string(value) == "" {
-			r.Errors = append(r.Errors, fmt.Sprintf("Label %s not present.", label))
-			r.State = scapiv1alpha3.FailState
-			r.Suggestions = append(r.Suggestions, fmt.Sprintf("Please include label %s", label))
+	for _, testLabel := range testLabels {
+		isTestLabelPresent = false
+		for _, imgLabel := range o.Labels {
+			if testLabel == imgLabel && testLabel != "" {
+				isTestLabelPresent = true
+			}
+			if isTestLabelPresent == false {
+				r.Errors = append(r.Errors, fmt.Sprintf("Label %s not present.", testLabel))
+				r.State = scapiv1alpha3.FailState
+				r.Suggestions = append(r.Suggestions, fmt.Sprintf("Please include label %s", testLabel))
+			}
 		}
-		// fmt.Println(string(value))
 	}
-
 	return wrapResult(r)
 }
 
@@ -199,11 +198,7 @@ func HasUnder40Layers(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
-	layers, err := o.GetImageLayers(o.Image)
-	if err != nil {
-		fmt.Printf("Couldn't get image layers %v", err)
-	}
-	if len(layers) >= 40 {
+	if len(o.LayerDigests) >= 40 {
 		r.State = scapiv1alpha3.FailState
 		r.Errors = append(r.Errors, "Image has 40 or more layers.")
 		r.Suggestions = append(r.Suggestions, "Reduce the number of layers by optimizing the container file.")

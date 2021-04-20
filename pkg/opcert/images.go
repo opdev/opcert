@@ -21,36 +21,44 @@ type OpCert struct {
 	Tags         []string
 	BaseImage    string
 	HasLicenses  bool
+	Labels       []string
 }
 
 func (o *OpCert) Init(builder string, img string) error {
 	o.Builder = builder
 
-	if err := o.PullImage(img); err != nil {
+	if err := o.pullImage(img); err != nil {
 		err := fmt.Errorf("opcert wasn't able to pull image from %v", img)
 		return err
 	}
 
-	baseImage, err := o.GetBaseImage(img)
+	baseImage, err := o.getBaseImage(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read a proper base image tag from %v manifest", img)
 		return err
 	}
 	o.BaseImage = baseImage
 
-	o.LayerDigests, err = o.GetImageLayers(img)
+	labels, err := o.getLabels(img)
+	if err != nil {
+		err = fmt.Errorf("opcert couldn't read labels from %v manifest", img)
+		return err
+	}
+	o.Labels = labels
+
+	o.LayerDigests, err = o.getImageLayers(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read image layers from %v", img)
 		return err
 	}
 
-	o.Tags, err = o.GetTags(img)
+	o.Tags, err = o.getTags(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read image tags from %v", img)
 		return err
 	}
 
-	o.HasLicenses, err = o.CheckLicenses(img)
+	o.HasLicenses, err = o.checkLicenses(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read directory structure from %v", img)
 		return err
@@ -59,7 +67,7 @@ func (o *OpCert) Init(builder string, img string) error {
 	return nil
 }
 
-func (o *OpCert) PullImage(img string) error {
+func (o *OpCert) pullImage(img string) error {
 
 	cmd := exec.Command("docker", "pull", img)
 
@@ -71,7 +79,30 @@ func (o *OpCert) PullImage(img string) error {
 	return nil
 }
 
-func (o *OpCert) GetBaseImage(img string) (string, error) {
+func (o *OpCert) getLabels(img string) ([]string, error) {
+
+	cmd := exec.Command(o.Builder, "inspect", img)
+	cmdOutput := &bytes.Buffer{}
+	cmd.Stdout = cmdOutput
+
+	err := cmd.Run()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+	}
+
+	op, _ := jq.Parse(".[0].Config.Labels")
+	byteLabels, _ := op.Apply(cmdOutput.Bytes())
+
+	labels := []string{}
+	err = json.Unmarshal(byteLabels, &labels)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return labels, nil
+}
+
+func (o *OpCert) getBaseImage(img string) (string, error) {
 
 	cmd := exec.Command(o.Builder, "inspect", img)
 	cmdOutput := &bytes.Buffer{}
@@ -97,7 +128,7 @@ func (o *OpCert) GetBaseImage(img string) (string, error) {
 	return baseImage, nil
 }
 
-func (o *OpCert) GetImageLayers(img string) ([]string, error) {
+func (o *OpCert) getImageLayers(img string) ([]string, error) {
 
 	cmd := exec.Command(o.Builder, "inspect", img)
 
@@ -122,7 +153,7 @@ func (o *OpCert) GetImageLayers(img string) ([]string, error) {
 	return imageLayers, nil
 }
 
-func (o *OpCert) GetTags(img string) ([]string, error) {
+func (o *OpCert) getTags(img string) ([]string, error) {
 
 	cmd := exec.Command("skopeo", "list-tags", img)
 
@@ -148,7 +179,7 @@ func (o *OpCert) GetTags(img string) ([]string, error) {
 
 	return tags, nil
 }
-func (o *OpCert) CheckLicenses(img string) (bool, error) {
+func (o *OpCert) checkLicenses(img string) (bool, error) {
 
 	cmd := exec.Command(o.Builder, "create", img)
 
