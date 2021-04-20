@@ -39,8 +39,8 @@ func main() {
 	// Names of the custom tests which would be passed in the
 	// `operator-sdk` command.
 	switch entrypoint[0] {
-	case IsRHELTest:
-		result = IsRHEL(&opcert)
+	case IsImageRedHatProvidedTest:
+		result = IsImageRedHatProvided(&opcert)
 	case HasLabelsTest:
 		result = HasLabels(img)
 	default:
@@ -64,7 +64,7 @@ func printValidTests() scapiv1alpha3.TestStatus {
 	result.Suggestions = make([]string, 0)
 
 	str := fmt.Sprintf("Valid tests for this image include: %s %s",
-		IsRHELTest,
+		IsImageRedHatProvidedTest,
 		HasLabelsTest)
 	result.Errors = append(result.Errors, str)
 	return scapiv1alpha3.TestStatus{
@@ -73,23 +73,31 @@ func printValidTests() scapiv1alpha3.TestStatus {
 }
 
 const (
-	IsRHELTest           = "is_rhel"
-	HasLabelsTest        = "has_labels"
-	HasUnder40LayersTest = "has_under_40_Layers"
-	HasGoodTagsTest      = "has_good_tags"
+	IsImageRedHatProvidedTest = "is_red_hat"
+	HasLabelsTest             = "has_labels"
+	HasUnder40LayersTest      = "has_under_40_Layers"
+	HasGoodTagsTest           = "has_good_tags"
 )
 
 // Mandatory tests with possible fail results:
 
-// 1. Container must be use a base image provided by Red Hat. (verify FROM clause (buildah inspect) against Red Hat catalog list or maybe the ubis at first)
-// Test names: is_rhel, has_base_rh_image, repo_list_successful
+// ******************************* Image Metadata Tests ***************************************
+
+// IsImageRedHatProvided:
+
+// a. Container must be use a base image provided by Red Hat.
 // Why? So the application's runtime dependencies, such as operating system components and libraries, are fully
 // supported.
 // How? Go to the Red Hat Container Catalog and select a base image to build upon. Use this image's name in
 // the FROM clause in your dockerfile. We recommend using one of the images that are part of the Red Hat
 // Universal Base Image (UBI) set, such as ubi7/ubi or ubi7/ubi-minimal.
 
-func IsRHEL(o *opcert.OpCert) scapiv1alpha3.TestStatus {
+// b. should not modify, replace or combine the Red Hat base layer(s)
+// Why? So the base layer provided by Red Hat can still be identified and inspected.
+// How? Typically not an issue. Do not use any tools that attempt to or actually modify, replace, combine (aka
+// squash) or otherwise obfuscate layers after the image has been built.
+
+func IsImageRedHatProvided(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r := scapiv1alpha3.TestResult{}
 	r.Name = "IsRHEL"
 	r.State = scapiv1alpha3.PassState
@@ -124,26 +132,15 @@ func IsRHEL(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	return wrapResult(r)
 }
 
-// 2. Container image to be distributed through non-Red Hat registries does not include Red Hat Enterprise
-// Linux (RHEL) kernel packages. (oscap-podman with xccdf profile)
-// Test name: ubi_content_ok
-// Why? To ensure, for a UBI type project, RPM packages present in a container image are only from UBI and RHEL
-// user space. Red Hat allows redistribution of UBI content as per UBI EULA. Red Hat allows redistribution of
-// RHEL user space packages as per Red Hat Container Certification Appendix. Presence of any kernel package will
-// cause the test to fail.f
-// How? Confirm all Red Hat RPMs included in the container image are from UBI and RHEL user space.
+// HasLabels:
 
-// 3. Container image must include the following metadata: (buildah inspect)
-
+// Container image must include the following metadata:
 // name: Name of the image
 // vendor: Company name
 // version: Version of the image
 // release: A number used to identify the specific build for this image
 // summary: A short overview of the application or component in this image
 // description: A long description of the application or component in this image
-
-// Test names: name_label_exists, vendor_label_exists, version_label_exists, release_label_exists,
-// summary_label_exists, description_label_exists
 // Why? Providing metadata in consistent format helps customers inspect and manage images
 // How? Define these as LABELs in your dockerfile.
 
@@ -185,33 +182,12 @@ func HasLabels(img string) scapiv1alpha3.TestStatus {
 	return wrapResult(r)
 }
 
-// 4. Container image cannot modify content provided by Red Hat packages or layers, except for files that are
-// meant to be modified by end users, such as configuration files (oscap-podman xccdf profile)
-// Test names: rpm_verify_successful, rpm_list_successful
-// Why? Unauthorized changes to Red Hat components would impact or invalidate their support
-// How? Don’t modify content in the base image or in Red Hat packages
+// HasUnder40Layers:
 
-// 5. Red Hat components in the container image cannot contain any critical or important vulnerabilities, as
-// defined at https://access.redhat.com/security/updates/classification (oscap-podman oval eval)
-// Test name: free_of_critical_vulnerabilities
-// Why? These vulnerabilities introduce risk to your customers
-// How? The certification report will indicate if such vulnerabilities are present in your image. It is recommended to
-// use the most recent version of a layer or package, and to update your image content using the following
-// command:
-// yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical
-
-// ***** 6. should not modify, replace or combine the Red Hat base layer(s) (buildah inspect ???)
-// Test name: good_layer_count
-// Why? So the base layer provided by Red Hat can still be identified and inspected.
-// How? Typically not an issue. Do not use any tools that attempt to or actually modify, replace, combine (aka
-// squash) or otherwise obfuscate layers after the image has been built.
-
-// ****** 7. The uncompressed container image should have less than 40 layers. (podman history -q <imagenameorid> | wc -l)
-// Test name: has_under_40_layers
+// The uncompressed container image should have less than 40 layers.
 // Why? To ensure that an uncompressed container image has less than 40 layers. Too many layers within a
 // container image can degrade container performance. Red Hat atomic errors out trying to mount an image with
 // more than 40 layers.
-// https://access.redhat.com/security/updates/classification
 // How? Confirm that an uncompressed container image has less than 40 layers. You can leverage following
 // commands to display layers and their size within a container image:
 // podman history <container image name> or docker history <container image name> .
@@ -235,8 +211,9 @@ func HasUnder40Layers(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	return wrapResult(r)
 }
 
-// ****** 8. Image should include a tag, other than latest
-// Test name: good_tags
+// HasGoodTags:
+
+// Image should include a tag, other than latest
 // Why? So the image can be uniquely identified
 // How? Use the docker tag command to add a tag. A common tag is the image version. The latest tag will be
 // automatically added to the most recent image, so it should not be set explicitly.
@@ -270,6 +247,32 @@ func HasGoodTags(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 // licensing information, if open source components are included in the image.
 // How? Create a directory named /licenses and include all relevant licensing and/or terms and conditions as text
 // file(s) in that directory.
+
+// *************************************  Security Tests ************************************************
+
+// 2. Container image to be distributed through non-Red Hat registries does not include Red Hat Enterprise
+// Linux (RHEL) kernel packages. (oscap-podman with xccdf profile)
+// Test name: ubi_content_ok
+// Why? To ensure, for a UBI type project, RPM packages present in a container image are only from UBI and RHEL
+// user space. Red Hat allows redistribution of UBI content as per UBI EULA. Red Hat allows redistribution of
+// RHEL user space packages as per Red Hat Container Certification Appendix. Presence of any kernel package will
+// cause the test to fail.f
+// How? Confirm all Red Hat RPMs included in the container image are from UBI and RHEL user space.
+
+// 4. Container image cannot modify content provided by Red Hat packages or layers, except for files that are
+// meant to be modified by end users, such as configuration files (oscap-podman xccdf profile)
+// Test names: rpm_verify_successful, rpm_list_successful
+// Why? Unauthorized changes to Red Hat components would impact or invalidate their support
+// How? Don’t modify content in the base image or in Red Hat packages
+
+// 5. Red Hat components in the container image cannot contain any critical or important vulnerabilities, as
+// defined at https://access.redhat.com/security/updates/classification (oscap-podman oval eval)
+// Test name: free_of_critical_vulnerabilities
+// Why? These vulnerabilities introduce risk to your customers
+// How? The certification report will indicate if such vulnerabilities are present in your image. It is recommended to
+// use the most recent version of a layer or package, and to update your image content using the following
+// command:
+// yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical
 
 // Recommendation tests that may require manual approval:
 
