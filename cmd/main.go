@@ -114,29 +114,21 @@ func IsImageRedHatProvided(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
-	//  pull base image from catalog
-	err := o.PullImage(o.BaseImage)
-	if err != nil {
+	// Check if base image is Red Hat
+	if o.BaseImage == "" {
 		r.State = scapiv1alpha3.FailState
-		r.Errors = append(r.Errors, "couldn't pull image from registry.access.redhat.com")
-		r.Suggestions = append(r.Suggestions, "Verify if the base image is provided by Red Hat and available at registry.access.redhat.com")
+		r.Errors = append(r.Errors, "Base image not present in Red Hat's catalog.")
 	}
-
-	// get Red Hat base image layer sha256 digests from manifest
-	rhImgLayers, err := o.GetImageLayers(o.BaseImage)
-	if err != nil {
-		fmt.Println(err)
-	}
+	r.Suggestions = append(r.Suggestions, "Verify that base image comes from Red Hat's catalog.")
 
 	// compare partner base image layers with Red Hat's base image layers
-	for i, layer := range rhImgLayers {
-		if o.LayerDigests[i] != layer {
+	for i, baseImageLayer := range o.BaseImageLayers {
+		if o.LayerDigests[i] != baseImageLayer {
 			r.State = scapiv1alpha3.FailState
-			r.Errors = append(r.Errors, "Base image layer "+o.LayerDigests[i]+" doesn't match Red Hat's layer "+layer)
+			r.Errors = append(r.Errors, "Base image layer "+o.LayerDigests[i]+" doesn't match Red Hat's layer "+baseImageLayer)
 		}
 	}
 	if r.State == scapiv1alpha3.FailState {
-		r.Suggestions = append(r.Suggestions, "Verify that base image is provided by Red Hat.")
 		r.Suggestions = append(r.Suggestions, "Make sure base layers weren't changed.")
 	}
 	return wrapResult(r)

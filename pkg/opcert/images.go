@@ -13,15 +13,16 @@ import (
 )
 
 type OpCert struct {
-	Version      string
-	Builder      string
-	Image        string
-	LayerCount   int
-	LayerDigests []string
-	Tags         []string
-	BaseImage    string
-	HasLicenses  bool
-	Labels       []string
+	Version         string
+	Builder         string
+	Image           string
+	LayerCount      int
+	LayerDigests    []string
+	Tags            []string
+	BaseImage       string
+	BaseImageLayers []string
+	HasLicenses     bool
+	Labels          []string
 }
 
 func (o *OpCert) Init(builder string, img string) error {
@@ -69,7 +70,7 @@ func (o *OpCert) Init(builder string, img string) error {
 
 func (o *OpCert) pullImage(img string) error {
 
-	cmd := exec.Command("docker", "pull", img)
+	cmd := exec.Command(o.Builder, "pull", img)
 
 	err := cmd.Run()
 	if err != nil {
@@ -124,6 +125,20 @@ func (o *OpCert) getBaseImage(img string) (string, error) {
 	release, _ := op.Apply(cmdOutput.Bytes())
 
 	baseImage := "registry.access.redhat.com/" + strings.Trim(string(name), "\"") + ":" + strings.Trim(string(version), "\"") + "-" + strings.Trim(string(release), "\"")
+
+	//  pull base image from catalog
+	err = o.pullImage(o.BaseImage)
+	if err != nil {
+		fmt.Printf("couldn't get image %v from registry.access.redhat.com. %v", img, err)
+	}
+	o.BaseImage = baseImage
+
+	// get Red Hat base image layer sha256 digests from manifest
+	rhImgLayers, err := o.getImageLayers(baseImage)
+	if err != nil {
+		fmt.Printf("couldn't get image layers %v from registry.access.redhat.com. %v", img, err)
+	}
+	o.BaseImageLayers = rhImgLayers
 
 	return baseImage, nil
 }
