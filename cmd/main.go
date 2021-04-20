@@ -10,6 +10,7 @@ import (
 
 	"github.com/opdev/opcert/pkg/opcert"
 	"github.com/savaki/jq"
+	"golang.org/x/mod/semver"
 
 	scapiv1alpha3 "github.com/operator-framework/api/pkg/apis/scorecard/v1alpha3"
 )
@@ -72,8 +73,10 @@ func printValidTests() scapiv1alpha3.TestStatus {
 }
 
 const (
-	IsRHELTest    = "is_rhel"
-	HasLabelsTest = "has_labels"
+	IsRHELTest           = "is_rhel"
+	HasLabelsTest        = "has_labels"
+	HasUnder40LayersTest = "has_under_40_Layers"
+	HasGoodTagsTest      = "has_good_tags"
 )
 
 // Mandatory tests with possible fail results:
@@ -213,7 +216,7 @@ func HasLabels(img string) scapiv1alpha3.TestStatus {
 // commands to display layers and their size within a container image:
 // podman history <container image name> or docker history <container image name> .
 
-func has_under_40_layers(o *opcert.OpCert) scapiv1alpha3.TestStatus {
+func HasUnder40Layers(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r := scapiv1alpha3.TestResult{}
 	r.Name = "Has Under 40 Layers"
 	r.State = scapiv1alpha3.PassState
@@ -237,6 +240,29 @@ func has_under_40_layers(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 // Why? So the image can be uniquely identified
 // How? Use the docker tag command to add a tag. A common tag is the image version. The latest tag will be
 // automatically added to the most recent image, so it should not be set explicitly.
+
+func HasGoodTags(o *opcert.OpCert) scapiv1alpha3.TestStatus {
+
+	r := scapiv1alpha3.TestResult{}
+	r.Name = "Has Good Tags"
+	r.State = scapiv1alpha3.PassState
+	r.Errors = make([]string, 0)
+	r.Suggestions = make([]string, 0)
+
+	goodTag := false
+
+	for _, tag := range o.Tags {
+		if semver.IsValid(tag) {
+			goodTag = true
+		}
+	}
+	if goodTag == false {
+		r.State = scapiv1alpha3.FailState
+		r.Errors = append(r.Errors, "There is no other tag than latest for the image %v", o.Image)
+		r.Suggestions = append(r.Suggestions, "Please add new tags to the image %v in the semver format.", o.Image)
+	}
+	return wrapResult(r)
+}
 
 // ****** 9. Image must include Partner’s software terms and conditions
 // Test name: has_licenses

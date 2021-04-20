@@ -17,6 +17,7 @@ type OpCert struct {
 	Image        string
 	LayerCount   int
 	LayerDigests []string
+	Tags         []string
 	BaseImage    string
 }
 
@@ -38,6 +39,12 @@ func (o *OpCert) Init(builder string, img string) error {
 	o.LayerDigests, err = o.GetImageLayers(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read image layers from %v", img)
+		return err
+	}
+
+	o.Tags, err = o.GetTags(img)
+	if err != nil {
+		err = fmt.Errorf("opcert couldn't read image tags from %v", img)
 		return err
 	}
 
@@ -105,4 +112,31 @@ func (o *OpCert) GetImageLayers(img string) ([]string, error) {
 	}
 
 	return imageLayers, nil
+}
+
+func (o *OpCert) GetTags(img string) ([]string, error) {
+
+	cmd := exec.Command("skopeo", "list-tags", img)
+
+	cmdOutput := &bytes.Buffer{}
+	cmd.Stdout = cmdOutput
+
+	err := cmd.Run()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+		return []string{}, err
+	}
+
+	op, _ := jq.Parse(".")
+	byteTags, _ := op.Apply(cmdOutput.Bytes())
+
+	fmt.Printf("Tags : %v", string(byteTags))
+
+	tags := []string{}
+	err = json.Unmarshal(byteTags, &tags)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return tags, nil
 }
