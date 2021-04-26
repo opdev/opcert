@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -22,65 +23,78 @@ type OpCert struct {
 	BaseImage       string
 	BaseImageLayers []string
 	HasLicenses     bool
-	Labels          []string
+	Labels          map[string]string
 }
 
 func (o *OpCert) Init(builder string, img string) error {
 	o.Builder = builder
 
-	if err := o.pullImage(img); err != nil {
-		err := fmt.Errorf("opcert wasn't able to pull image from %v", img)
+	if err := o.PullImage(img); err != nil {
+		if err != nil {
+			fmt.Printf("Error pulling image %s", img)
+			fmt.Printf("Error: %v", err)
+		}
 		return err
 	}
 
-	baseImage, err := o.getBaseImage(img)
+	baseImage, err := o.GetBaseImage(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read a proper base image tag from %v manifest", img)
 		return err
 	}
 	o.BaseImage = baseImage
 
-	labels, err := o.getLabels(img)
+	labels, err := o.GetLabels(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read labels from %v manifest", img)
 		return err
 	}
 	o.Labels = labels
 
-	o.LayerDigests, err = o.getImageLayers(img)
+	o.LayerDigests, err = o.GetImageLayers(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read image layers from %v", img)
 		return err
 	}
 
-	o.Tags, err = o.getTags(img)
+	o.Tags, err = o.GetTags(img)
 	if err != nil {
 		err = fmt.Errorf("opcert couldn't read image tags from %v", img)
 		return err
 	}
 
-	o.HasLicenses, err = o.checkLicenses(img)
-	if err != nil {
-		err = fmt.Errorf("opcert couldn't read directory structure from %v", img)
-		return err
-	}
+	// o.HasLicenses, err = o.CheckLicenses(img)
+	// if err != nil {
+	// 	err = fmt.Errorf("opcert couldn't read directory structure from %v", img)
+	// 	return err
+	// }
 
 	return nil
 }
 
-func (o *OpCert) pullImage(img string) error {
+func (o *OpCert) PullImage(img string) error {
 
 	cmd := exec.Command(o.Builder, "pull", img)
 
+	stdout := &bytes.Buffer{}
+	cmd.Stdout = stdout
+	stderr := &bytes.Buffer{}
+	cmd.Stderr = stderr
+
 	err := cmd.Run()
 	if err != nil {
-		fmt.Printf("Couldn't pull image %s %s\n", img, err)
-		return err
+		if strings.Contains(string(stderr.Bytes()), "Repo not found") {
+			err = fmt.Errorf("Couldn't find repository for image %v", img)
+			return err
+		} else {
+			err = fmt.Errorf("Unexpected error: %v", err)
+			return err
+		}
 	}
 	return nil
 }
 
-func (o *OpCert) getLabels(img string) ([]string, error) {
+func (o *OpCert) GetLabels(img string) (map[string]string, error) {
 
 	cmd := exec.Command(o.Builder, "inspect", img)
 	cmdOutput := &bytes.Buffer{}
@@ -94,16 +108,17 @@ func (o *OpCert) getLabels(img string) ([]string, error) {
 	op, _ := jq.Parse(".[0].Config.Labels")
 	byteLabels, _ := op.Apply(cmdOutput.Bytes())
 
-	labels := []string{}
+	labels := map[string]string{}
 	err = json.Unmarshal(byteLabels, &labels)
 	if err != nil {
 		fmt.Println(err)
+		return map[string]string{}, err
 	}
 
 	return labels, nil
 }
 
-func (o *OpCert) getBaseImage(img string) (string, error) {
+func (o *OpCert) GetBaseImage(img string) (string, error) {
 
 	cmd := exec.Command(o.Builder, "inspect", img)
 	cmdOutput := &bytes.Buffer{}
@@ -115,6 +130,11 @@ func (o *OpCert) getBaseImage(img string) (string, error) {
 		return "", err
 	}
 
+	// determining the base image using the Label name in the ContainerConfig struct
+	// this is a quick way if the container manifest was not changed
+	// partner may put all labels on the Config struct for now
+	// TODO: make the checks based only on 256 SHA hashes
+
 	op, _ := jq.Parse(".[0].ContainerConfig.Labels.name")
 	name, _ := op.Apply(cmdOutput.Bytes())
 
@@ -124,26 +144,23 @@ func (o *OpCert) getBaseImage(img string) (string, error) {
 	op, _ = jq.Parse(".[0].ContainerConfig.Labels.release")
 	release, _ := op.Apply(cmdOutput.Bytes())
 
-	baseImage := "registry.access.redhat.com/" + strings.Trim(string(name), "\"") + ":" + strings.Trim(string(version), "\"") + "-" + strings.Trim(string(release), "\"")
+	var baseImage string
 
-	//  pull base image from catalog
-	err = o.pullImage(o.BaseImage)
-	if err != nil {
-		fmt.Printf("couldn't get image %v from registry.access.redhat.com. %v", img, err)
-	}
-	o.BaseImage = baseImage
+	// If the label name doesn't exist or is empty let the baseImage field empty
+	// That will fail the IsRedHat test
 
-	// get Red Hat base image layer sha256 digests from manifest
-	rhImgLayers, err := o.getImageLayers(baseImage)
-	if err != nil {
-		fmt.Printf("couldn't get image layers %v from registry.access.redhat.com. %v", img, err)
+	if string(name) != "" {
+		baseImage = "registry.access.redhat.com/" + strings.Trim(string(name), "\"") + ":" + strings.Trim(string(version), "\"") + "-" + strings.Trim(string(release), "\"")
+		o.BaseImage = baseImage
+	} else {
+		baseImage = ""
+		o.BaseImage = ""
 	}
-	o.BaseImageLayers = rhImgLayers
 
 	return baseImage, nil
 }
 
-func (o *OpCert) getImageLayers(img string) ([]string, error) {
+func (o *OpCert) GetImageLayers(img string) ([]string, error) {
 
 	cmd := exec.Command(o.Builder, "inspect", img)
 
@@ -168,23 +185,24 @@ func (o *OpCert) getImageLayers(img string) ([]string, error) {
 	return imageLayers, nil
 }
 
-func (o *OpCert) getTags(img string) ([]string, error) {
+func (o *OpCert) GetTags(img string) ([]string, error) {
 
-	cmd := exec.Command("skopeo", "list-tags", img)
+	cmd := exec.Command("docker", "inspect", img)
 
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput
 
+	stderr := &bytes.Buffer{}
+	cmd.Stderr = stderr
+
 	err := cmd.Run()
 	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
+		fmt.Printf("Error %v", stderr)
 		return []string{}, err
 	}
 
-	op, _ := jq.Parse(".")
+	op, _ := jq.Parse(".[0].RepoTags")
 	byteTags, _ := op.Apply(cmdOutput.Bytes())
-
-	fmt.Printf("Tags : %v", string(byteTags))
 
 	tags := []string{}
 	err = json.Unmarshal(byteTags, &tags)
@@ -194,31 +212,52 @@ func (o *OpCert) getTags(img string) ([]string, error) {
 
 	return tags, nil
 }
-func (o *OpCert) checkLicenses(img string) (bool, error) {
+func (o *OpCert) CheckLicenses(img string) (bool, error) {
 
 	cmd := exec.Command(o.Builder, "create", img)
 
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput
 
+	stderr := &bytes.Buffer{}
+	cmd.Stderr = stderr
+
 	err := cmd.Run()
 	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
+		fmt.Printf("Error: %v", stderr)
 		return false, err
 	}
 
 	op, _ := jq.Parse(".")
 	containerID, _ := op.Apply(cmdOutput.Bytes())
 
-	cmd = exec.Command(o.Builder, "cp", string(containerID), ":/", "/scorecard/certified/")
+	cmd = exec.Command("mkdir", "-p", "container_fs")
+
+	cmd.Stderr = stderr
 
 	err = cmd.Run()
 	if err != nil {
-		log.Fatalf("cmd.Run() failed with %s\n", err)
+		if strings.Contains(err.Error(), "File exists") {
+
+		}
+		fmt.Printf("Error: %v", stderr)
 		return false, err
 	}
 
-	files, err := ioutil.ReadDir("/scorecard/certified/")
+	cmd = exec.Command("sudo", o.Builder, "cp", strings.TrimSuffix(string(containerID), "\n")+":/", "./container_fs")
+	cmd.Stderr = os.Stderr
+
+	stdin := &bytes.Buffer{}
+	cmd.Stdin = stdin
+
+	err = cmd.Run()
+
+	if err != nil {
+		fmt.Printf("Error: %v", err)
+		return false, err
+	}
+
+	files, err := ioutil.ReadDir("./container_fs")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -229,6 +268,16 @@ func (o *OpCert) checkLicenses(img string) (bool, error) {
 		if f.IsDir() && f.Name() == "licenses" {
 			hasLicenses = true
 		}
+	}
+
+	cmd = exec.Command("rm", "-rf", "container_fs")
+
+	cmd.Stderr = stderr
+
+	err = cmd.Run()
+	if err != nil {
+		fmt.Printf("Error: %v", stderr)
+		return false, err
 	}
 
 	return hasLicenses, nil

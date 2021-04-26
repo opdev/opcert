@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "debug",
       "program": "${file}",
-      "args": ["is_rhel", "localhost/ubi8:custom"]
+      "args": ["has_labels", "centos"],
     }
   ]
 }

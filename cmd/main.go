@@ -31,26 +31,29 @@ func main() {
 
 	opcert := opcert.OpCert{}
 
-	opcert.Init(builder, img)
-
+	err := opcert.Init(builder, img)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	// Names of the custom tests which would be passed in the
 	// `operator-sdk` command.
 	switch entrypoint[0] {
 
 	case IsImageRedHatProvidedTest:
-		result = IsImageRedHatProvided(&opcert)
+		result = IsImageRedHat(&opcert)
 
 	case HasLabelsTest:
 		result = HasLabels(&opcert)
 
 	case HasUnder40LayersTest:
-		result = HasLabels(&opcert)
+		result = HasUnder40Layers(&opcert)
 
 	case HasGoodTagsTest:
-		result = HasLabels(&opcert)
+		result = HasGoodTags(&opcert)
 
 	case HasLicensesTest:
-		result = HasLabels(&opcert)
+		result = HasLicenses(&opcert)
 
 	default:
 		result = printValidTests()
@@ -107,9 +110,9 @@ func printValidTests() scapiv1alpha3.TestStatus {
 // How? Typically not an issue. Do not use any tools that attempt to or actually modify, replace, combine (aka
 // squash) or otherwise obfuscate layers after the image has been built.
 
-func IsImageRedHatProvided(o *opcert.OpCert) scapiv1alpha3.TestStatus {
+func IsImageRedHat(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r := scapiv1alpha3.TestResult{}
-	r.Name = "Is Image Red Hat Provided"
+	r.Name = "Is Base Image Red Hat"
 	r.State = scapiv1alpha3.PassState
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
@@ -118,8 +121,26 @@ func IsImageRedHatProvided(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	if o.BaseImage == "" {
 		r.State = scapiv1alpha3.FailState
 		r.Errors = append(r.Errors, "Base image not present in Red Hat's catalog.")
+		r.Suggestions = append(r.Suggestions, "Verify that base image comes from Red Hat's catalog.")
+		r.Suggestions = append(r.Suggestions, "If it's an actual Red Hat based image, verify if the ContainerConfig was changed.")
+		r.Suggestions = append(r.Suggestions, "The original Red Hat labels must be preserved in order to verify its origin.")
+		r.Suggestions = append(r.Suggestions, "Use the Config field to insert new labels instead.")
+		r.Suggestions = append(r.Suggestions, "In case you need any assistance please contact sd-ecosystem@redhat.com")
+		return wrapResult(r)
 	}
-	r.Suggestions = append(r.Suggestions, "Verify that base image comes from Red Hat's catalog.")
+	//  pull base image from catalog
+	err := o.PullImage(o.BaseImage)
+	if err != nil {
+		fmt.Printf("couldn't get image %v from registry.access.redhat.com. %v", o.BaseImage, err)
+	}
+
+	// get Red Hat base image layer sha256 digests from manifest
+	rhImgLayers, err := o.GetImageLayers(o.BaseImage)
+	if err != nil {
+		fmt.Printf("couldn't get image layers %v from registry.access.redhat.com. %v", o.BaseImage, err)
+	}
+
+	o.BaseImageLayers = rhImgLayers
 
 	// compare partner base image layers with Red Hat's base image layers
 	for i, baseImageLayer := range o.BaseImageLayers {
@@ -128,6 +149,7 @@ func IsImageRedHatProvided(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 			r.Errors = append(r.Errors, "Base image layer "+o.LayerDigests[i]+" doesn't match Red Hat's layer "+baseImageLayer)
 		}
 	}
+
 	if r.State == scapiv1alpha3.FailState {
 		r.Suggestions = append(r.Suggestions, "Make sure base layers weren't changed.")
 	}
@@ -153,22 +175,28 @@ func HasLabels(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
-	testLabels := []string{"name", "vendor", "version", "release", "summary", "description"}
+	requiredLabels := []string{"name", "vendor", "version", "release", "summary", "description"}
 
 	var isTestLabelPresent bool
 
-	for _, testLabel := range testLabels {
+	// For each of the required label check the label map
+	// and report the missing labels
+
+	for _, requiredLabel := range requiredLabels {
 		isTestLabelPresent = false
-		for _, imgLabel := range o.Labels {
-			if testLabel == imgLabel && testLabel != "" {
+		for imgLabel := range o.Labels {
+			if requiredLabel == imgLabel && requiredLabel != "" {
 				isTestLabelPresent = true
 			}
-			if isTestLabelPresent == false {
-				r.Errors = append(r.Errors, fmt.Sprintf("Label %s not present.", testLabel))
-				r.State = scapiv1alpha3.FailState
-				r.Suggestions = append(r.Suggestions, fmt.Sprintf("Please include label %s", testLabel))
-			}
 		}
+		if isTestLabelPresent == false {
+			r.Errors = append(r.Errors, fmt.Sprintf("Label %s not present.", requiredLabel))
+			r.State = scapiv1alpha3.FailState
+			r.Suggestions = append(r.Suggestions, fmt.Sprintf("Please include label %s in the container manifest's Config section.", requiredLabel))
+		}
+	}
+	if r.State == scapiv1alpha3.FailState {
+		r.Suggestions = append(r.Suggestions, "In case you need any assistance please contact sd-ecosystem@redhat.com")
 	}
 	return wrapResult(r)
 }
