@@ -181,6 +181,8 @@ func HasLabels(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 
 	// For each of the required label check the label map
 	// and report the missing labels
+	// NOTE: the labels come from the Config field on the manifest
+	// TODO: future work can change this for any label present on the manifest
 
 	for _, requiredLabel := range requiredLabels {
 		isTestLabelPresent = false
@@ -218,10 +220,13 @@ func HasUnder40Layers(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	r.Errors = make([]string, 0)
 	r.Suggestions = make([]string, 0)
 
+	qtLayer := len(o.LayerDigests)
+	fmt.Sprintln(qtLayer)
 	if len(o.LayerDigests) >= 40 {
 		r.State = scapiv1alpha3.FailState
 		r.Errors = append(r.Errors, "Image has 40 or more layers.")
 		r.Suggestions = append(r.Suggestions, "Reduce the number of layers by optimizing the container file.")
+		r.Suggestions = append(r.Suggestions, "In case you need any assistance please contact sd-ecosystem@redhat.com")
 	}
 	return wrapResult(r)
 }

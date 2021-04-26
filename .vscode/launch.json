@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "debug",
       "program": "${file}",
-      "args": ["has_labels", "centos"],
+      "args": ["has_under_40_Layers", "quay.io/acmenezes/ubi8:40plus"],
     }
   ]
 }
