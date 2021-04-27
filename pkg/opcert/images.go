@@ -36,6 +36,7 @@ func (o *OpCert) Init(builder string, img string) error {
 		}
 		return err
 	}
+	o.Image = img
 
 	baseImage, err := o.GetBaseImage(img)
 	if err != nil {

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/opdev/opcert/pkg/opcert"
-	"golang.org/x/mod/semver"
 
 	scapiv1alpha3 "github.com/operator-framework/api/pkg/apis/scorecard/v1alpha3"
 )
@@ -249,14 +249,16 @@ func HasGoodTags(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	goodTag := false
 
 	for _, tag := range o.Tags {
-		if semver.IsValid(tag) {
+		fmt.Printf("TAG: %v", tag[strings.Index(tag, ":")+1:])
+		if tag[strings.Index(tag, ":")+1:] != "latest" {
 			goodTag = true
+			break
 		}
 	}
 	if goodTag == false {
 		r.State = scapiv1alpha3.FailState
-		r.Errors = append(r.Errors, "There is no other tag than latest for the image %v", o.Image)
-		r.Suggestions = append(r.Suggestions, "Please add new tags to the image %v in the semver format.", o.Image)
+		r.Errors = append(r.Errors, fmt.Sprintf("There are no tags with the SemVer format for the image %v", o.Image))
+		r.Suggestions = append(r.Suggestions, fmt.Sprintf("Please add new tags to the image %v in the SemvVer format.", o.Image))
 	}
 	return wrapResult(r)
 }
