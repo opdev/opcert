@@ -4,24 +4,17 @@ opcert is a tool to run operator image and bundle certification tests. This proj
 
 This very first alpha 0.0.1 version has only one test that already complies with the operator-sdk scorecard standard. It can be tested as below:
 
-To use it locally in your own laptop follow the instructions below:
+To use it locally in your own laptop or personal computer download it from the releases section on https://github.com/opdev/opcert.
 
-```
-git clone https://github.com/opdev/opcert.git
-cd opcert/build
-```
+The opcert tool defaults to podman when testing images.
 
-For Linux users:
+So for Docker users it's necessary to use the builder flag like below:
 ```
-linux/opcert has_labels <YOUR IMAGE:TAG HERE>
-```
-For Mac users:
-```
-macos/opcert has_labels <YOUR IMAGE:TAG HERE>
+opcert -builder docker -test has_labels -image <YOUR IMAGE:TAG HERE>
 ```
 For a succeed image you should see something like this:
 
-`macos/opcert has_labels registry.access.redhat.com/ubi8:latest`
+`opcert -test has_labels -image registry.access.redhat.com/ubi8:latest`
 
 ```
 registry.access.redhat.com/ubi8:latest
@@ -37,7 +30,7 @@ registry.access.redhat.com/ubi8:latest
 
 For a failed test you should see something like this:
 
-`macos/opcert has_labels centos:latest`
+`opcert -test has_labels -image centos:latest`
 
 ```
 centos:latest
@@ -69,11 +62,11 @@ centos:latest
 
 Finally if you want to run from a container image, you don't need to clone the project. Below is what you may try (keep in mind that it may take a while to pull the image from the container):
 
-`docker run -it --privileged quay.io/opdev/opcert:0.0.1 /scorecard/certified/opcert has_labels centos:latest`
+`docker run -it --privileged quay.io/opdev/opcert:0.0.1 /scorecard/certified/opcert -test has_labels -image centos:latest`
 
 or
 
-`podman run -it --privileged quay.io/opdev/opcert:0.0.1 /scorecard/certified/opcert has_labels centos:latest`
+`podman run -it --privileged quay.io/opdev/opcert:0.0.1 /scorecard/certified/opcert -test has_labels -image centos:latest`
 
 ```
 centos:latest
