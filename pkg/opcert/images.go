@@ -188,7 +188,7 @@ func (o *OpCert) GetImageLayers(img string) ([]string, error) {
 
 func (o *OpCert) GetTags(img string) ([]string, error) {
 
-	cmd := exec.Command("docker", "inspect", img)
+	cmd := exec.Command(o.Builder, "inspect", img)
 
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput
