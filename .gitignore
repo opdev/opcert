@@ -3,5 +3,5 @@ manifests-*
 __pycache__
 test
 container_fs
-build/linux
-build/macos
+build/linux/opcert
+build/macos/opcert
