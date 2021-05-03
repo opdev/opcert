@@ -98,9 +98,12 @@ func printValidTests() scapiv1alpha3.TestStatus {
 	result.Errors = make([]string, 0)
 	result.Suggestions = make([]string, 0)
 
-	str := fmt.Sprintf("Valid tests for this image include: %s %s",
+	str := fmt.Sprintf("Valid tests for this image include: %s %s %s %s",
 		IsImageRedHatProvidedTest,
-		HasLabelsTest)
+		HasLabelsTest,
+		HasUnder40LayersTest,
+		HasGoodTagsTest)
+
 	result.Errors = append(result.Errors, str)
 	return scapiv1alpha3.TestStatus{
 		Results: []scapiv1alpha3.TestResult{result},
