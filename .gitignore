@@ -3,3 +3,5 @@ manifests-*
 __pycache__
 test
 container_fs
+build/linux
+build/macos
