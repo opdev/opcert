@@ -257,8 +257,8 @@ func HasGoodTags(o *opcert.OpCert) scapiv1alpha3.TestStatus {
 	}
 	if goodTag == false {
 		r.State = scapiv1alpha3.FailState
-		r.Errors = append(r.Errors, fmt.Sprintf("There are no tags with the SemVer format for the image %v", o.Image))
-		r.Suggestions = append(r.Suggestions, fmt.Sprintf("Please add new tags to the image %v in the SemvVer format.", o.Image))
+		r.Errors = append(r.Errors, fmt.Sprintf("There are no tags other than latest for the image %v", o.Image))
+		r.Suggestions = append(r.Suggestions, fmt.Sprintf("Please add new tags to the image %v.", o.Image))
 	}
 	return wrapResult(r)
 }
