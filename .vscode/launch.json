@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "debug",
       "program": "${file}",
-      "args": ["has_good_tags", "quay.io/acmenezes/ubi8:1"],
+      "args": ["-builder", "docker","-test", "has_good_tags", "-image", "quay.io/acmenezes/ubi8:1"],
     }
   ]
 }

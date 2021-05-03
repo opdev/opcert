@@ -1,8 +1,7 @@
 FROM quay.io/podman/stable:latest
 
 RUN yum install -y openscap-utils; \
-yum install -y buildah wget scap-security-guide; \
-yum install -y skopeo
+yum install -y wget scap-security-guide;
 
 WORKDIR /scorecard/certified/
 

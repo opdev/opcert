@@ -2,9 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
-	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/opdev/opcert/pkg/opcert"
@@ -13,32 +14,46 @@ import (
 )
 
 func main() {
-	entrypoint := os.Args[1:]
-	if len(entrypoint) == 0 {
-		log.Fatal("Test name argument is required")
-	}
-
-	// Read the pod's untar'd bundle from a well-known path.
-	// cfg, err := apimanifests.GetBundleFromDir(PodBundleRoot)
-	// if err != nil {
-	// 	log.Fatal(err.Error())
+	// entrypoint := os.Args[1:]
+	// if len(entrypoint) == 0 {
+	// log.Fatal("Test name argument is required")
 	// }
-	img := os.Args[2]
-	builder := "docker"
+	var builder string
+	var test string
+	var img string
+
+	flag.StringVar(&builder, "builder", "podman", "-builder : is the image tool. It can be either docker or podman. Defaults to podman.")
+	flag.StringVar(&test, "test", "is_red_hat", "-test : is the test to be run. Defaults to is_red_had.")
+	flag.StringVar(&img, "image", "registry.access.redhat.com/ubi8:latest", "-image: operator image to be tested. Defaults to pure ubi8 image.")
+
+	// first argument should be the builder
+
+	flag.Parse()
+
+	_, err := exec.LookPath(builder)
+	if err != nil {
+		fmt.Printf("Couldn't find %v, got the error %v\n", builder, err)
+		if builder == "podman" {
+			fmt.Printf("Please verify that you have %v installed or consider using docker.\n", builder)
+		} else {
+			fmt.Printf("Please verify that you have %v installed or consider using podman.\n", builder)
+		}
+		return
+	}
 
 	fmt.Println(img)
 	var result scapiv1alpha3.TestStatus
 
 	opcert := opcert.OpCert{}
 
-	err := opcert.Init(builder, img)
+	err = opcert.Init(builder, img)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	// Names of the custom tests which would be passed in the
 	// `operator-sdk` command.
-	switch entrypoint[0] {
+	switch test {
 
 	case IsImageRedHatProvidedTest:
 		result = IsImageRedHat(&opcert)
