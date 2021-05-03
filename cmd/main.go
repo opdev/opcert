@@ -71,7 +71,7 @@ func main() {
 const (
 	IsImageRedHatProvidedTest = "is_red_hat"
 	HasLabelsTest             = "has_labels"
-	HasUnder40LayersTest      = "has_under_40_Layers"
+	HasUnder40LayersTest      = "has_under_40_layers"
 	HasGoodTagsTest           = "has_good_tags"
 	HasLicensesTest           = "has_licenses"
 )
