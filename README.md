@@ -2,7 +2,7 @@
 
 opcert is a tool to run operator image and bundle certification tests. This project has a companion container image that has the opcert binary in order to run tests from the container. That will be used to integrate with operator-sdk's scorecard subcommand in order to provide partners a way to test locally their operators without having to use yet another tool.
 
-This very first alpha 0.0.1 version has only one test that already complies with the operator-sdk scorecard standard. It can be tested as below:
+This very first alpha 0.0.1 version has four tests (is_red_hat, has_labels, has_under_40_layers, has_good_tags) that already complies with the operator-sdk scorecard standard. It can be tested as below:
 
 To use it locally in your own laptop or personal computer download it from the releases section on https://github.com/opdev/opcert.
 
@@ -60,7 +60,7 @@ centos:latest
 }
 ```
 
-Finally if you want to run from a container image, you don't need to clone the project. Below is what you may try (keep in mind that it may take a while to pull the image from the container):
+Finally if you want to run from a container image below is what you may try (keep in mind that it may take a while to pull the image from the container):
 
 `docker run -it --privileged quay.io/opdev/opcert:0.0.1 /scorecard/certified/opcert -test has_labels -image centos:latest`
 
