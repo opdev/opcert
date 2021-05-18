@@ -5,3 +5,4 @@ test
 container_fs
 build/linux/opcert
 build/macos/opcert
+.DS_Store
